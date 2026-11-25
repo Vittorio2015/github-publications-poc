@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Publications — GitHub Pages PoC</title>
+
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 900px;
+      margin: 2rem auto;
+      padding: 0 1rem;
+      line-height: 1.6;
+      color: #222;
+    }
+
+    h1 {
+      border-bottom: 2px solid #ddd;
+      padding-bottom: 0.5rem;
+    }
+
+    h2 {
+      margin-top: 2rem;
+    }
+
+    article {
+      margin-bottom: 1.5rem;
+    }
+
+    a {
+      color: #005a9c;
+    }
+
+    .filters {
+      margin: 1.5rem 0;
+    }
+
+    .filters label {
+      display: block;
+      font-weight: 600;
+      margin-bottom: 0.5rem;
+    }
+
+    .filters select {
+      font: inherit;
+      padding: 0.5rem;
+      max-width: 100%;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Publications</h1>
+
+<div class="filters">
+  <label for="research-filter">Research Area:</label>
+
+  <select id="research-filter">
+    <option value="">All research areas</option>
+  </select>
+</div>
+
+<div id="publications">Loading publications…</div>
+
+  <script>
+    let allPublications = [];
+    async function loadPublications() {
+      const container = document.getElementById("publications");
+
+      try {
+        const response = await fetch("publications.csv");
+
+        if (!response.ok) {
+          throw new Error("Unable to load publications.csv");
+        }
+
+        const csv = await response.text();
+allPublications = parseCSV(csv);
+
+allPublications.sort(
+  (a, b) => Number(b.year) - Number(a.year)
+);
+
+populateResearchFilter(allPublications);
+displayPublications(allPublications);
+
+} catch (error) {
+  container.textContent =
+    "Sorry, the publications could not be loaded.";
+  console.error(error);
+}
+}
+
+    function populateResearchFilter(publications) {
+  const filter = document.getElementById("research-filter");
+
+  const taxonomies = new Set();
+
+  publications.forEach(publication => {
+    const terms = publication.taxonomies
+      .split(";")
+      .map(term => term.trim())
+      .filter(Boolean);
+
+    terms.forEach(term => taxonomies.add(term));
+  });
+
+  [...taxonomies].sort().forEach(term => {
+    const option = document.createElement("option");
+
+    option.value = term;
+    option.textContent = term;
+
+    filter.appendChild(option);
+  });
+
+  filter.addEventListener("change", () => {
+    const selected = filter.value;
+
+    const filtered = selected
+      ? allPublications.filter(publication =>
+          publication.taxonomies
+            .split(";")
+            .map(term => term.trim())
+            .includes(selected)
+        )
+      : allPublications;
+
+    displayPublications(filtered);
+  });
+}
+
+
+function displayPublications(publications) {
+  const container = document.getElementById("publications");
+
+  container.replaceChildren();
+
+  if (publications.length === 0) {
+    container.textContent = "No publications found.";
+    return;
+  }
+
+  let currentYear = null;
+
+  publications.forEach(publication => {
+    if (publication.year !== currentYear) {
+      currentYear = publication.year;
+
+      const heading = document.createElement("h2");
+      heading.textContent = currentYear;
+
+      container.appendChild(heading);
+    }
+
+    const article = document.createElement("article");
+
+    const authors = document.createElement("p");
+    authors.textContent = publication.authors;
+
+    const title = document.createElement("strong");
+    title.textContent = publication.title;
+
+    const details = document.createElement("p");
+    details.textContent = publication.publication;
+
+    article.append(authors, title, details);
+
+    if (publication.publisher_url) {
+      const link = document.createElement("a");
+
+      link.href = publication.publisher_url;
+      link.textContent = "Publisher's Version";
+
+      article.appendChild(link);
+    }
+
+    container.appendChild(article);
+
+    // Display publication status
+    if (publication.status) {
+      const status = document.createElement("p");
+
+      const label = document.createElement("strong");
+      label.textContent = "Status: ";
+
+      status.append(label, publication.status);
+      article.appendChild(status);
+    }
+
+    // Display available PDF links
+    const pdfLinks = [];
+
+    for (let i = 1; i <= 3; i++) {
+      const label = publication[`pdf_${i}_label`];
+      const url = publication[`pdf_${i}_url`];
+
+      if (label && url) {
+        pdfLinks.push({ label, url });
+      }
+    }
+
+    if (pdfLinks.length > 0) {
+      const heading = document.createElement("h3");
+      heading.textContent = "Available PDFs";
+
+      const list = document.createElement("ul");
+
+      pdfLinks.forEach(pdf => {
+        const item = document.createElement("li");
+        const link = document.createElement("a");
+
+        link.href = pdf.url;
+        link.textContent = pdf.label;
+
+        item.appendChild(link);
+        list.appendChild(item);
+      });
+
+      article.append(heading, list);
+    }
+    // Display publication version history
+    const historyEntries = [];
+
+    for (let i = 1; i <= 2; i++) {
+      const description = publication[`history_${i}`];
+      const url = publication[`history_${i}_url`];
+
+      if (description) {
+        historyEntries.push({ description, url });
+      }
+    }
+
+    if (historyEntries.length > 0) {
+      const heading = document.createElement("h3");
+      heading.textContent = "Version History";
+
+      const list = document.createElement("ul");
+
+      historyEntries.forEach(history => {
+        const item = document.createElement("li");
+
+        if (history.url) {
+          const link = document.createElement("a");
+
+          link.href = history.url;
+          link.textContent = history.description;
+
+          item.appendChild(link);
+        } else {
+          item.textContent = history.description;
+        }
+
+        list.appendChild(item);
+      });
+
+      article.append(heading, list);
+    }
+  });
+}
+
+    function parseCSV(text) {
+      const rows = [];
+      let row = [];
+      let field = "";
+      let inQuotes = false;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+
+        if (char === '"') {
+          if (inQuotes && text[i + 1] === '"') {
+            field += '"';
+            i++;
+          } else {
+            inQuotes = !inQuotes;
+          }
+        } else if (char === "," && !inQuotes) {
+          row.push(field);
+          field = "";
+        } else if ((char === "\n" || char === "\r") && !inQuotes) {
+          if (char === "\r" && text[i + 1] === "\n") i++;
+
+          row.push(field);
+          rows.push(row);
+          row = [];
+          field = "";
+        } else {
+          field += char;
+        }
+      }
+
+      if (field || row.length) {
+        row.push(field);
+        rows.push(row);
+      }
+
+      const headers = rows.shift().map(header => header.trim());
+
+      return rows
+        .filter(row => row.some(value => value.trim()))
+        .map(row => Object.fromEntries(
+          headers.map((header, index) => [header, row[index] || ""])
+        ));
+    }
+
+      loadPublications();
+  </script>
+
+</body>
+</html>
